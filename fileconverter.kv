@@ -1,0 +1,122 @@
+#:kivy 2.1.0
+
+<FileConverterScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(15)
+        spacing: dp(10)
+        
+        Label:
+            text: 'Universal File Converter'
+            font_size: '24sp'
+            size_hint_y: None
+            height: dp(50)
+            bold: True
+        
+        BoxLayout:
+            orientation: 'vertical'
+            size_hint_y: 0.7
+            canvas.before:
+                Color:
+                    rgba: 0.9, 0.9, 0.9, 1
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            FileChooserListView:
+                id: file_chooser
+                path: root.get_default_path()
+                on_selection: root.on_file_selected(*args)
+        
+        Label:
+            id: selected_file_label
+            text: 'No file selected'
+            size_hint_y: None
+            height: dp(30)
+            text_size: self.size
+            halign: 'left'
+            valign: 'middle'
+        
+        BoxLayout:
+            size_hint_y: None
+            height: dp(50)
+            spacing: dp(10)
+            
+            Label:
+                text: 'Convert to:'
+                size_hint_x: 0.3
+            
+            Spinner:
+                id: format_spinner
+                text: 'Select format'
+                values: ['Select a file first']
+                size_hint_x: 0.7
+        
+        BoxLayout:
+            size_hint_y: None
+            height: dp(40)
+            
+            Label:
+                text: 'Progress:'
+                size_hint_x: 0.2
+            
+            ProgressBar:
+                id: progress_bar
+                max: 100
+                value: 0
+                size_hint_x: 0.8
+        
+        Label:
+            id: status_label
+            text: 'Ready'
+            size_hint_y: None
+            height: dp(30)
+            color: 0, 0.7, 0, 1
+        
+        Button:
+            id: convert_button
+            text: 'Convert'
+            size_hint_y: None
+            height: dp(60)
+            background_color: 0.2, 0.7, 0.3, 1
+            disabled: True
+            on_press: root.on_convert_pressed()
+
+<SuccessPopup>:
+    title: 'Conversion Complete'
+    size_hint: 0.8, 0.4
+    auto_dismiss: True
+    
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(10)
+        
+        Label:
+            text: root.result_text
+            text_size: self.width, None
+            size_hint_y: 0.7
+        
+        Button:
+            text: 'OK'
+            size_hint_y: 0.3
+            on_press: root.dismiss()
+
+<ErrorPopup>:
+    title: 'Conversion Error'
+    size_hint: 0.8, 0.4
+    auto_dismiss: True
+    
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(10)
+        
+        Label:
+            text: root.error_text
+            text_size: self.width, None
+            color: 1, 0.3, 0.3, 1
+            size_hint_y: 0.7
+        
+        Button:
+            text: 'OK'
+            size_hint_y: 0.3
+            on_press: root.dismiss()

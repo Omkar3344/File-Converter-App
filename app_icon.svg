@@ -1,0 +1,27 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect x="30" y="30" width="452" height="452" rx="50" ry="50" fill="#3498db" />
+  
+  <!-- File Outlines -->
+  <g transform="translate(256, 256) rotate(15) translate(-256, -256)">
+    <rect x="110" y="110" width="240" height="320" rx="20" ry="20" fill="#ecf0f1" stroke="#2c3e50" stroke-width="10" />
+    <path d="M110 150 L350 150" stroke="#2c3e50" stroke-width="10" />
+    <circle cx="130" cy="130" r="8" fill="#e74c3c" />
+    <circle cx="160" cy="130" r="8" fill="#f1c40f" />
+    <circle cx="190" cy="130" r="8" fill="#2ecc71" />
+  </g>
+  
+  <g transform="translate(256, 256) rotate(-15) translate(-256, -256)">
+    <rect x="160" y="80" width="240" height="320" rx="20" ry="20" fill="#ffffff" stroke="#2c3e50" stroke-width="10" />
+    <path d="M160 120 L400 120" stroke="#2c3e50" stroke-width="10" />
+    <circle cx="180" cy="100" r="8" fill="#e74c3c" />
+    <circle cx="210" cy="100" r="8" fill="#f1c40f" />
+    <circle cx="240" cy="100" r="8" fill="#2ecc71" />
+  </g>
+  
+  <!-- Conversion Arrow -->
+  <g transform="translate(256, 256)">
+    <path d="M-60,-50 L60,50 M60,50 L60,20 M60,50 L30,50" stroke="#e74c3c" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" />
+    <path d="M60,-50 L-60,50 M-60,50 L-60,20 M-60,50 L-30,50" stroke="#2ecc71" stroke-width="15" stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>
