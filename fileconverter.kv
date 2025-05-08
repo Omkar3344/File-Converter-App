@@ -1,162 +1,537 @@
 #:kivy 2.1.0
+#:import Window kivy.core.window.Window
+#:import platform kivy.utils.platform
+#:import Factory kivy.factory.Factory
+
+<NavigationDrawer@BoxLayout>:
+    orientation: 'vertical'
+    padding: dp(10)
+    spacing: dp(10)
+    canvas.before:
+        Color:
+            rgba: app.theme_bg_color
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    
+    BoxLayout:
+        size_hint_y: None
+        height: dp(100)
+        padding: dp(10)
+        
+        AsyncImage:
+            source: 'data/icon.png'
+            size_hint: None, None
+            size: dp(80), dp(80)
+        
+        Label:
+            text: 'File Converter'
+            font_size: '22sp'
+            bold: True
+            color: app.theme_text_color
+    
+    Button:
+        id: converter_btn
+        text: 'Converter'
+        on_press: app.root.current = 'converter'; app.update_nav_buttons('converter')
+        background_color: [0.3, 0.6, 0.3, 1]
+    
+    Button:
+        id: recent_btn
+        text: 'Recent Files'
+        on_press: app.root.current = 'recent'; app.update_nav_buttons('recent')
+        background_color: [0.4, 0.4, 0.4, 1]
+    
+    Button:
+        id: settings_btn
+        text: 'Settings'
+        on_press: app.root.current = 'settings'; app.update_nav_buttons('settings')
+        background_color: [0.4, 0.4, 0.4, 1]
+    
+    Button:
+        id: help_btn
+        text: 'Help'
+        on_press: app.root.current = 'help'; app.update_nav_buttons('help')
+        background_color: [0.4, 0.4, 0.4, 1]
+    
+    Widget:
+        # Flexible space
+
+<DrawerLayout@BoxLayout>:
+    size_hint_x: None
+    width: min(dp(300), Window.width * 0.8)
+    x: -self.width
+    
+    canvas.after:
+        Color:
+            rgba: [0, 0, 0, 0.5] if self.x > -self.width else [0, 0, 0, 0]
+        Rectangle:
+            pos: self.width, 0
+            size: Window.width - self.width, Window.height
+    
+    NavigationDrawer:
+        id: nav_content
+
+<CustomFileChooser>:
+    filters: ['!*.tmp', '!*.swp', '!*.sys', '!*/System Volume Information/*', '!*/Windows/*']
+    canvas.before:
+        Color:
+            rgba: [0.9, 0.9, 0.9, 1] if not app.is_dark_mode else [0.2, 0.2, 0.2, 1]
+        Rectangle:
+            pos: self.pos
+            size: self.size
+    
+    canvas.after:
+        Color:
+            rgba: app.theme_accent_color
+        Line:
+            rectangle: self.x, self.y, self.width, self.height
+            width: 1.5
 
 <FileConverterScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: app.theme_bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
+        # Top bar with title and menu
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            padding: [dp(10), dp(5)]
+            canvas.before:
+                Color:
+                    rgba: app.theme_accent_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            IconButton:
+                source: 'data/menu_icon.png' if platform == 'android' or platform == 'ios' else 'data/icon.png'
+                on_press: drawer.open_drawer()
+            
+            Label:
+                text: 'Universal File Converter'
+                font_size: '20sp'
+                bold: True
+                color: [1, 1, 1, 1]
+        
+        # Main content
+        BoxLayout:
+            orientation: 'vertical'
+            padding: dp(15)
+            spacing: dp(10)
+            
+            Label:
+                text: 'Select a file to convert:'
+                color: app.theme_text_color
+                size_hint_y: None
+                height: dp(30)
+                halign: 'left'
+                text_size: self.size
+            
+            # File chooser
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint_y: 0.7
+                padding: [0, dp(2)]
+                
+                CustomFileChooser:
+                    id: file_chooser
+                    path: root.get_default_path()
+                    on_selection: root.on_file_selected(*args)
+            
+            Label:
+                id: selected_file_label
+                text: 'No file selected'
+                size_hint_y: None
+                height: dp(30)
+                text_size: self.size
+                halign: 'left'
+                valign: 'middle'
+                color: app.theme_text_color
+            
+            BoxLayout:
+                size_hint_y: None
+                height: dp(50)
+                spacing: dp(10)
+                
+                Label:
+                    text: 'Convert to:'
+                    size_hint_x: 0.3
+                    color: app.theme_text_color
+                
+                Spinner:
+                    id: format_spinner
+                    text: 'Select format'
+                    values: ['Select a file first']
+                    size_hint_x: 0.7
+                    background_color: [0.4, 0.4, 0.4, 1] if app.is_dark_mode else [0.9, 0.9, 0.9, 1]
+                    color: app.theme_text_color
+            
+            BoxLayout:
+                size_hint_y: None
+                height: dp(40)
+                
+                Label:
+                    text: 'Progress:'
+                    size_hint_x: 0.2
+                    color: app.theme_text_color
+                
+                ProgressBar:
+                    id: progress_bar
+                    max: 100
+                    value: 0
+                    size_hint_x: 0.8
+            
+            Label:
+                id: status_label
+                text: 'Ready'
+                size_hint_y: None
+                height: dp(30)
+                color: [0, 0.7, 0, 1]
+            
+            # Button row for Convert and Download buttons
+            BoxLayout:
+                size_hint_y: None
+                height: dp(60)
+                spacing: dp(10)
+                
+                Button:
+                    id: convert_button
+                    text: 'Convert'
+                    background_color: app.theme_accent_color
+                    disabled: True
+                    font_size: '18sp'
+                    bold: True
+                    on_press: root.on_convert_pressed()
+                
+                Button:
+                    id: download_button
+                    text: 'Download'
+                    background_color: [0.2, 0.3, 0.8, 1]  # Blue color to differentiate
+                    disabled: True
+                    font_size: '18sp'
+                    bold: True
+                    on_press: root.on_download_pressed()
+    
+    # Navigation drawer (hidden by default)
+    DrawerLayout:
+        id: drawer
+
+<SettingsScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: app.theme_bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
+        # Top bar
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            padding: [dp(10), dp(5)]
+            canvas.before:
+                Color:
+                    rgba: app.theme_accent_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            IconButton:
+                source: 'data/back_icon.png'
+                on_press: app.root.current = 'converter'; app.update_nav_buttons('converter')
+            
+            Label:
+                text: 'Settings'
+                font_size: '20sp'
+                bold: True
+                color: [1, 1, 1, 1]
+        
+        # Settings content
+        BoxLayout:
+            orientation: 'vertical'
+            padding: dp(20)
+            spacing: dp(15)
+            
+            # Dark mode toggle
+            BoxLayout:
+                size_hint_y: None
+                height: dp(50)
+                spacing: dp(10)
+                
+                Label:
+                    text: 'Dark Mode'
+                    color: app.theme_text_color
+                    size_hint_x: 0.7
+                
+                Switch:
+                    size_hint_x: 0.3
+                    active: root.dark_mode
+                    on_active: root.toggle_dark_mode()
+            
+            # About section
+            Label:
+                text: 'About'
+                color: app.theme_text_color
+                font_size: '18sp'
+                bold: True
+                size_hint_y: None
+                height: dp(40)
+                halign: 'left'
+                text_size: self.width, None
+            
+            Label:
+                text: 'Universal File Converter\nVersion 1.0\n\nDeveloped by Omkar'
+                color: app.theme_text_color
+                size_hint_y: None
+                height: dp(120)
+                halign: 'left'
+                valign: 'top'
+                text_size: self.width, None
+            
+            Widget:
+                # Flexible space at bottom
+
+<RecentFilesScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: app.theme_bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
+        # Top bar
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            padding: [dp(10), dp(5)]
+            canvas.before:
+                Color:
+                    rgba: app.theme_accent_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            IconButton:
+                source: 'data/back_icon.png'
+                on_press: app.root.current = 'converter'; app.update_nav_buttons('converter')
+            
+            Label:
+                text: 'Recent Files'
+                font_size: '20sp'
+                bold: True
+                color: [1, 1, 1, 1]
+            
+            IconButton:
+                source: 'data/refresh_icon.png'
+                on_press: root.load_recent_files()
+        
+        # Recent files list
+        ScrollView:
+            do_scroll_x: False
+            
+            BoxLayout:
+                id: recent_files_list
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(10)
+                spacing: dp(5)
+
+<HelpScreen>:
+    BoxLayout:
+        orientation: 'vertical'
+        canvas.before:
+            Color:
+                rgba: app.theme_bg_color
+            Rectangle:
+                pos: self.pos
+                size: self.size
+        
+        # Top bar
+        BoxLayout:
+            size_hint_y: None
+            height: dp(60)
+            padding: [dp(10), dp(5)]
+            canvas.before:
+                Color:
+                    rgba: app.theme_accent_color
+                Rectangle:
+                    pos: self.pos
+                    size: self.size
+            
+            IconButton:
+                source: 'data/back_icon.png'
+                on_press: app.root.current = 'converter'; app.update_nav_buttons('converter')
+            
+            Label:
+                text: 'Help'
+                font_size: '20sp'
+                bold: True
+                color: [1, 1, 1, 1]
+        
+        # Help content
+        ScrollView:
+            do_scroll_x: False
+            
+            BoxLayout:
+                orientation: 'vertical'
+                size_hint_y: None
+                height: self.minimum_height
+                padding: dp(20)
+                spacing: dp(15)
+                
+                Label:
+                    text: 'How to Use'
+                    color: app.theme_text_color
+                    font_size: '18sp'
+                    bold: True
+                    size_hint_y: None
+                    height: dp(40)
+                    halign: 'left'
+                    text_size: self.width, None
+                
+                Label:
+                    text: '1. Select a file using the file browser\n2. Choose the output format from the dropdown\n3. Click "Convert" to process the file\n4. Click "Download" to save the converted file'
+                    color: app.theme_text_color
+                    size_hint_y: None
+                    height: dp(120)
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.width, None
+                
+                Label:
+                    text: 'Supported Formats'
+                    color: app.theme_text_color
+                    font_size: '18sp'
+                    bold: True
+                    size_hint_y: None
+                    height: dp(40)
+                    halign: 'left'
+                    text_size: self.width, None
+                
+                Label:
+                    text: 'Images: JPG, PNG, BMP, GIF, WEBP\nDocuments: PDF, DOCX, TXT\nData: CSV, XLSX, JSON, XML, HTML'
+                    color: app.theme_text_color
+                    size_hint_y: None
+                    height: dp(100)
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.width, None
+                
+                Label:
+                    text: 'Troubleshooting'
+                    color: app.theme_text_color
+                    font_size: '18sp'
+                    bold: True
+                    size_hint_y: None
+                    height: dp(40)
+                    halign: 'left'
+                    text_size: self.width, None
+                
+                Label:
+                    text: 'If you encounter issues:\n\n• Make sure the app has file access permissions\n• Check that your file is not corrupted\n• Some conversions may require additional apps'
+                    color: app.theme_text_color
+                    size_hint_y: None
+                    height: dp(150)
+                    halign: 'left'
+                    valign: 'top'
+                    text_size: self.width, None
+
+<SuccessPopup>:
+    title: 'Conversion Complete'
+    size_hint: 0.85, 0.45
+    auto_dismiss: True
+    
     BoxLayout:
         orientation: 'vertical'
         padding: dp(15)
         spacing: dp(10)
         
-        Label:
-            text: 'Universal File Converter'
-            font_size: '24sp'
-            size_hint_y: None
-            height: dp(50)
-            bold: True
-        
-        BoxLayout:
-            orientation: 'vertical'
-            size_hint_y: 0.7
-            canvas.before:
-                Color:
-                    rgba: 0.9, 0.9, 0.9, 1
-                Rectangle:
-                    pos: self.pos
-                    size: self.size
-            
-            FileChooserListView:
-                id: file_chooser
-                path: root.get_default_path()
-                on_selection: root.on_file_selected(*args)
-        
-        Label:
-            id: selected_file_label
-            text: 'No file selected'
-            size_hint_y: None
-            height: dp(30)
-            text_size: self.size
-            halign: 'left'
-            valign: 'middle'
-        
-        BoxLayout:
-            size_hint_y: None
-            height: dp(50)
-            spacing: dp(10)
-            
-            Label:
-                text: 'Convert to:'
-                size_hint_x: 0.3
-            
-            Spinner:
-                id: format_spinner
-                text: 'Select format'
-                values: ['Select a file first']
-                size_hint_x: 0.7
-        
-        BoxLayout:
-            size_hint_y: None
-            height: dp(40)
-            
-            Label:
-                text: 'Progress:'
-                size_hint_x: 0.2
-            
-            ProgressBar:
-                id: progress_bar
-                max: 100
-                value: 0
-                size_hint_x: 0.8
-        
-        Label:
-            id: status_label
-            text: 'Ready'
-            size_hint_y: None
-            height: dp(30)
-            color: 0, 0.7, 0, 1
-        
-        # Button row for Convert and Download buttons
-        BoxLayout:
-            size_hint_y: None
-            height: dp(60)
-            spacing: dp(10)
-            
-            Button:
-                id: convert_button
-                text: 'Convert'
-                background_color: 0.2, 0.7, 0.3, 1
-                disabled: True
-                on_press: root.on_convert_pressed()
-            
-            Button:
-                id: download_button
-                text: 'Download'
-                background_color: 0.2, 0.3, 0.8, 1  # Blue color to differentiate
-                disabled: True
-                on_press: root.on_download_pressed()
-
-<SuccessPopup>:
-    title: 'Conversion Complete'
-    size_hint: 0.8, 0.4
-    auto_dismiss: True
-    
-    BoxLayout:
-        orientation: 'vertical'
-        padding: dp(10)
+        AsyncImage:
+            source: 'data/success_icon.png'
+            size_hint_y: 0.3
         
         Label:
             text: root.result_text
             text_size: self.width, None
-            size_hint_y: 0.7
+            size_hint_y: 0.5
+            color: [1, 1, 1, 1]
         
         BoxLayout:
-            size_hint_y: 0.3
+            size_hint_y: 0.2
             spacing: dp(10)
             
             Button:
                 text: 'OK'
                 size_hint_x: 0.5
                 on_press: root.dismiss()
+                background_color: [0.3, 0.6, 0.3, 1]
             
             Button:
                 text: 'Download'
                 size_hint_x: 0.5
                 on_press: root.download_file()
+                background_color: [0.2, 0.3, 0.8, 1]
 
 <ErrorPopup>:
     title: 'Conversion Error'
-    size_hint: 0.8, 0.4
+    size_hint: 0.85, 0.45
     auto_dismiss: True
     
     BoxLayout:
         orientation: 'vertical'
-        padding: dp(10)
+        padding: dp(15)
+        spacing: dp(10)
+        
+        AsyncImage:
+            source: 'data/error_icon.png'
+            size_hint_y: 0.3
         
         Label:
             text: root.error_text
             text_size: self.width, None
-            color: 1, 0.3, 0.3, 1
-            size_hint_y: 0.7
+            color: [1, 1, 1, 1]
+            size_hint_y: 0.5
         
         Button:
             text: 'OK'
-            size_hint_y: 0.3
+            size_hint_y: 0.2
             on_press: root.dismiss()
+            background_color: [0.8, 0.3, 0.3, 1]
 
 <DownloadSuccessPopup>:
     title: 'Download Complete'
-    size_hint: 0.8, 0.4
+    size_hint: 0.85, 0.45
     auto_dismiss: True
     
     BoxLayout:
         orientation: 'vertical'
-        padding: dp(10)
+        padding: dp(15)
+        spacing: dp(10)
+        
+        AsyncImage:
+            source: 'data/download_icon.png'
+            size_hint_y: 0.3
         
         Label:
             text: root.download_text
             text_size: self.width, None
-            color: 0, 0.7, 0, 1
-            size_hint_y: 0.7
+            color: [1, 1, 1, 1]
+            size_hint_y: 0.5
         
         Button:
             text: 'OK'
-            size_hint_y: 0.3
+            size_hint_y: 0.2
             on_press: root.dismiss()
+            background_color: [0.3, 0.5, 0.8, 1]
