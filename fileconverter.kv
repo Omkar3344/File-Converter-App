@@ -73,14 +73,25 @@
             height: dp(30)
             color: 0, 0.7, 0, 1
         
-        Button:
-            id: convert_button
-            text: 'Convert'
+        # Button row for Convert and Download buttons
+        BoxLayout:
             size_hint_y: None
             height: dp(60)
-            background_color: 0.2, 0.7, 0.3, 1
-            disabled: True
-            on_press: root.on_convert_pressed()
+            spacing: dp(10)
+            
+            Button:
+                id: convert_button
+                text: 'Convert'
+                background_color: 0.2, 0.7, 0.3, 1
+                disabled: True
+                on_press: root.on_convert_pressed()
+            
+            Button:
+                id: download_button
+                text: 'Download'
+                background_color: 0.2, 0.3, 0.8, 1  # Blue color to differentiate
+                disabled: True
+                on_press: root.on_download_pressed()
 
 <SuccessPopup>:
     title: 'Conversion Complete'
@@ -96,10 +107,19 @@
             text_size: self.width, None
             size_hint_y: 0.7
         
-        Button:
-            text: 'OK'
+        BoxLayout:
             size_hint_y: 0.3
-            on_press: root.dismiss()
+            spacing: dp(10)
+            
+            Button:
+                text: 'OK'
+                size_hint_x: 0.5
+                on_press: root.dismiss()
+            
+            Button:
+                text: 'Download'
+                size_hint_x: 0.5
+                on_press: root.download_file()
 
 <ErrorPopup>:
     title: 'Conversion Error'
@@ -114,6 +134,26 @@
             text: root.error_text
             text_size: self.width, None
             color: 1, 0.3, 0.3, 1
+            size_hint_y: 0.7
+        
+        Button:
+            text: 'OK'
+            size_hint_y: 0.3
+            on_press: root.dismiss()
+
+<DownloadSuccessPopup>:
+    title: 'Download Complete'
+    size_hint: 0.8, 0.4
+    auto_dismiss: True
+    
+    BoxLayout:
+        orientation: 'vertical'
+        padding: dp(10)
+        
+        Label:
+            text: root.download_text
+            text_size: self.width, None
+            color: 0, 0.7, 0, 1
             size_hint_y: 0.7
         
         Button:
