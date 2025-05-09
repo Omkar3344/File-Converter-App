@@ -104,11 +104,10 @@ def convert_image(source_path, target_path, progress_callback):
     
     # Handle special case for JPG format
     if target_path.lower().endswith('.jpg') or target_path.lower().endswith('.jpeg'):
-        # Convert to RGB if needed (JPG doesn't support alpha)
-        if img.mode == 'RGBA':
-            rgb_img = Image.new('RGB', img.size, (255, 255, 255))
-            rgb_img.paste(img, mask=img.split()[3])  # Use alpha channel as mask
-            img = rgb_img
+        # Convert to RGB if the image mode is not RGB (JPG only supports RGB mode)
+        if img.mode != 'RGB':
+            # For palette (P) mode or any other mode that's not RGB, convert to RGB
+            img = img.convert('RGB')
     
     progress_callback(60)
     img.save(target_path)

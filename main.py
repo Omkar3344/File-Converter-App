@@ -18,6 +18,7 @@ from kivy.uix.scrollview import ScrollView
 from kivy.core.window import Window
 from kivy.uix.image import AsyncImage
 from kivy.factory import Factory
+from kivy.graphics import Color, Rectangle
 
 import os
 import threading
@@ -270,13 +271,17 @@ class RecentFilesScreen(Screen):
             
             item.add_widget(button_layout)
             
-            # Add separator
+            # Create a proper separator
             separator = BoxLayout(
                 size_hint_y=None,
                 height=dp(1),
-                padding=[dp(5), 0],
-                canvas={'Color': [0.3, 0.3, 0.3, 0.2]}
+                padding=[dp(5), 0]
             )
+            
+            # Add color to the separator using canvas instructions
+            with separator.canvas:
+                Color(0.3, 0.3, 0.3, 0.2)
+                Rectangle(pos=separator.pos, size=separator.size)
             
             # Add to list
             list_container.add_widget(item)
