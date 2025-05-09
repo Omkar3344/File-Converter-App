@@ -2,10 +2,15 @@ import os
 import time
 from PIL import Image
 import pandas as pd
+import tempfile
+import io
+import sys
+import subprocess
 from PyPDF2 import PdfReader, PdfWriter
 from docx import Document
 import traceback
 import logging
+import json
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, 
@@ -214,14 +219,24 @@ def pdf_to_images(source_path, target_path, progress_callback):
         progress_callback(10)
         
         logger.info(f"Converting PDF to image(s): {source_path} -> {target_path}")
-        pdf = PdfReader(source_path)
-        total_pages = len(pdf.pages)
         
-        if total_pages == 0:
-            logger.error("PDF has no pages")
-            return False
-            
-        logger.info(f"PDF has {total_pages} pages")
+        # Check if pdf2image is available
+        try:
+            from pdf2image import convert_from_path
+            has_pdf2image = True
+        except ImportError:
+            has_pdf2image = False
+            logger.warning("pdf2image library not available, falling back to PyMuPDF")
+        
+        # Check if PyMuPDF is available
+        try:
+            import fitz
+            has_pymupdf = True
+        except ImportError:
+            has_pymupdf = False
+            if not has_pdf2image:
+                logger.error("Neither pdf2image nor PyMuPDF is available")
+                return False
         
         # Get base name without extension
         base_path = os.path.splitext(target_path)[0]
@@ -229,20 +244,49 @@ def pdf_to_images(source_path, target_path, progress_callback):
         
         progress_callback(20)
         
-        # Currently this is a mock implementation since full PDF-to-image
-        # conversion is complex and requires additional libraries
-        for i in range(min(total_pages, 1)):  # Only convert first page for simplicity
-            # In a real implementation, you would render the PDF page as an image
-            # For this example, we'll create a placeholder image
-            img = Image.new('RGB', (800, 1000), color=(255, 255, 255))
-            img_path = f"{base_path}_page{i+1}.{ext}"
-            img.save(img_path)
-            
-            logger.info(f"Created image for page {i+1}: {img_path}")
-            progress_callback(20 + (i+1) * 80 // total_pages)
+        # Convert using pdf2image if available
+        if has_pdf2image:
+            try:
+                images = convert_from_path(source_path, dpi=300)
+                total_pages = len(images)
+                logger.info(f"PDF has {total_pages} pages")
+                
+                for i, img in enumerate(images):
+                    img_path = f"{base_path}_page{i+1}.{ext}"
+                    img.save(img_path)
+                    logger.info(f"Created image for page {i+1}: {img_path}")
+                    progress_callback(20 + (i+1) * 70 // total_pages)
+                    
+                return True
+            except Exception as e:
+                logger.error(f"pdf2image conversion failed: {str(e)}")
+                if not has_pymupdf:
+                    return False
         
-        progress_callback(100)
-        return True
+        # Convert using PyMuPDF if pdf2image failed or is not available
+        if has_pymupdf:
+            pdf_document = fitz.open(source_path)
+            total_pages = len(pdf_document)
+            logger.info(f"PDF has {total_pages} pages")
+            
+            for i, page in enumerate(pdf_document):
+                pix = page.get_pixmap(matrix=fitz.Matrix(300/72, 300/72))
+                img_path = f"{base_path}_page{i+1}.{ext}"
+                
+                # For JPG, we need RGB
+                if ext.lower() in ["jpg", "jpeg"]:
+                    pix = fitz.Pixmap(fitz.csRGB, pix)
+                
+                pix.save(img_path)
+                logger.info(f"Created image for page {i+1}: {img_path}")
+                progress_callback(20 + (i+1) * 70 // total_pages)
+            
+            pdf_document.close()
+            return True
+            
+        # If we got here, both methods failed
+        logger.error("Failed to convert PDF to images")
+        return False
         
     except Exception as e:
         logger.error(f"PDF to images error: {str(e)}")
@@ -250,29 +294,63 @@ def pdf_to_images(source_path, target_path, progress_callback):
         return False
 
 def pdf_to_text(source_path, target_path, progress_callback):
-    """Extract text from a PDF."""
+    """Extract text from a PDF using a combination of methods for better results."""
     try:
         progress_callback(10)
         
         logger.info(f"Converting PDF to text: {source_path} -> {target_path}")
+        
+        # Try PyPDF2 first
         pdf = PdfReader(source_path)
         total_pages = len(pdf.pages)
         logger.info(f"PDF has {total_pages} pages")
         
+        # Check if PyMuPDF is available for better text extraction
+        try:
+            import fitz
+            has_pymupdf = True
+        except ImportError:
+            has_pymupdf = False
+            logger.warning("PyMuPDF not available, using PyPDF2 for text extraction")
+        
         progress_callback(20)
         
         with open(target_path, 'w', encoding='utf-8') as text_file:
-            for i, page in enumerate(pdf.pages):
-                text = page.extract_text()
-                text_file.write(text)
-                text_file.write('\n\n--- Page Break ---\n\n')
-                logger.info(f"Extracted text from page {i+1} (length: {len(text)} chars)")
-                progress_callback(20 + (i+1) * 70 // total_pages)
+            # Use PyMuPDF if available
+            if has_pymupdf:
+                doc = fitz.open(source_path)
+                for i, page in enumerate(doc):
+                    text = page.get_text()
+                    text_file.write(text)
+                    text_file.write('\n\n--- Page Break ---\n\n')
+                    logger.info(f"Extracted text from page {i+1} (length: {len(text)} chars)")
+                    progress_callback(20 + (i+1) * 70 // total_pages)
+                doc.close()
+            else:
+                # Fallback to PyPDF2
+                for i, page in enumerate(pdf.pages):
+                    text = page.extract_text()
+                    text_file.write(text)
+                    text_file.write('\n\n--- Page Break ---\n\n')
+                    logger.info(f"Extracted text from page {i+1} (length: {len(text)} chars)")
+                    progress_callback(20 + (i+1) * 70 // total_pages)
         
         # Verify file was created
         if not os.path.exists(target_path):
             logger.error(f"Failed to create text file: {target_path}")
             return False
+            
+        # If file is empty, try alternative method with pdfminer.six if available
+        if os.path.getsize(target_path) < 100:  # If file is very small
+            logger.warning("Text extraction yielded little content, trying alternative method")
+            try:
+                from pdfminer.high_level import extract_text as pdfminer_extract_text
+                text = pdfminer_extract_text(source_path)
+                with open(target_path, 'w', encoding='utf-8') as text_file:
+                    text_file.write(text)
+                logger.info(f"Used pdfminer.six to extract text (length: {len(text)} chars)")
+            except ImportError:
+                logger.warning("pdfminer.six not available for alternative text extraction")
             
         logger.info(f"Successfully created text file: {target_path}")
         progress_callback(100)
@@ -284,30 +362,131 @@ def pdf_to_text(source_path, target_path, progress_callback):
         return False
 
 def docx_to_pdf(source_path, target_path, progress_callback):
-    """Convert DOCX to PDF."""
+    """Convert DOCX to PDF using multiple methods."""
     try:
         progress_callback(20)
         
         logger.info(f"Converting DOCX to PDF: {source_path} -> {target_path}")
-        # This is a placeholder for actual conversion
-        # In a real app, you'd use libraries like docx2pdf, python-docx, and reportlab
-        # For mobile deployment, this would require additional setup
         
-        # Mock conversion - create a simple PDF
-        pdf_writer = PdfWriter()
-        pdf_writer.add_blank_page(width=612, height=792)  # US Letter size
+        # Try docx2pdf if available
+        try:
+            from docx2pdf import convert
+            logger.info("Using docx2pdf for conversion")
+            convert(source_path, target_path)
+            
+            # Verify file was created
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                logger.info(f"Successfully created PDF file using docx2pdf: {target_path}")
+                progress_callback(100)
+                return True
+            else:
+                logger.warning("docx2pdf conversion failed or created empty file")
+        except ImportError:
+            logger.warning("docx2pdf not available, trying alternative method")
         
+        # Alternative method using python-docx and reportlab
+        try:
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import SimpleDocTemplate, Paragraph
+            
+            logger.info("Using python-docx and reportlab for conversion")
+            
+            # Read the DOCX file
+            doc = Document(source_path)
+            
+            # Extract text content
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            
+            # Create a PDF
+            styles = getSampleStyleSheet()
+            pdf_doc = SimpleDocTemplate(target_path, pagesize=letter)
+            
+            # Convert paragraphs to reportlab paragraphs
+            pdf_elements = [Paragraph(text, styles["Normal"]) for text in paragraphs]
+            
+            # Build the PDF
+            pdf_doc.build(pdf_elements)
+            
+            # Verify file was created
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                logger.info(f"Successfully created PDF file using reportlab: {target_path}")
+                progress_callback(100)
+                return True
+            else:
+                logger.warning("reportlab conversion failed or created empty file")
+        except ImportError:
+            logger.warning("reportlab not available, falling back to basic method")
+        
+        # Last resort - create a basic PDF with text
         progress_callback(80)
         
-        with open(target_path, 'wb') as output_pdf:
-            pdf_writer.write(output_pdf)
+        # Read DOCX content
+        doc = Document(source_path)
+        content = "\n".join([para.text for para in doc.paragraphs])
+        
+        # Create a simple PDF with PyPDF2
+        from PyPDF2 import PdfWriter
+        from reportlab.pdfgen import canvas
+        from io import BytesIO
+        
+        # Create a PDF in memory
+        packet = BytesIO()
+        can = canvas.Canvas(packet, pagesize=letter)
+        
+        # Write the text - basic implementation
+        text_lines = content.split('\n')
+        y = 750  # starting y position
+        for line in text_lines:
+            if not line.strip():
+                y -= 12
+                continue
+                
+            # Split long lines
+            words = line.split()
+            current_line = ""
+            for word in words:
+                test_line = current_line + " " + word if current_line else word
+                if can.stringWidth(test_line, "Helvetica", 11) < 500:  # max width
+                    current_line = test_line
+                else:
+                    can.drawString(50, y, current_line)
+                    y -= 12
+                    if y < 50:  # new page
+                        can.showPage()
+                        y = 750
+                    current_line = word
+            
+            if current_line:
+                can.drawString(50, y, current_line)
+                y -= 12
+            
+            if y < 50:  # new page
+                can.showPage()
+                y = 750
+        
+        can.save()
+        
+        # Get the PDF data and write to file
+        packet.seek(0)
+        new_pdf = PdfReader(packet)
+        output = PdfWriter()
+        
+        # Add all pages
+        for page in range(len(new_pdf.pages)):
+            output.add_page(new_pdf.pages[page])
+        
+        # Write to file
+        with open(target_path, "wb") as output_file:
+            output.write(output_file)
         
         # Verify file was created
         if not os.path.exists(target_path):
             logger.error(f"Failed to create PDF file: {target_path}")
             return False
             
-        logger.info(f"Successfully created PDF file: {target_path}")
+        logger.info(f"Successfully created basic PDF file: {target_path}")
         progress_callback(100)
         return True
         
@@ -327,9 +506,19 @@ def docx_to_text(source_path, target_path, progress_callback):
         progress_callback(50)
         
         with open(target_path, 'w', encoding='utf-8') as text_file:
+            # Extract text from paragraphs
             for para in doc.paragraphs:
                 text_file.write(para.text)
                 text_file.write('\n')
+            
+            # Extract text from tables
+            for table in doc.tables:
+                text_file.write('\n--- TABLE ---\n')
+                for row in table.rows:
+                    row_text = [cell.text for cell in row.cells]
+                    text_file.write(' | '.join(row_text))
+                    text_file.write('\n')
+                text_file.write('--- END TABLE ---\n\n')
         
         # Verify file was created
         if not os.path.exists(target_path):
@@ -351,17 +540,113 @@ def text_to_pdf(source_path, target_path, progress_callback):
         progress_callback(20)
         
         logger.info(f"Converting text to PDF: {source_path} -> {target_path}")
-        # This is a placeholder for actual conversion
-        # In a real app, you'd use libraries like reportlab or fpdf
         
-        # Mock conversion - create a simple PDF
-        pdf_writer = PdfWriter()
-        pdf_writer.add_blank_page(width=612, height=792)  # US Letter size
+        # Try using reportlab if available
+        try:
+            from reportlab.lib.pagesizes import letter
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import SimpleDocTemplate, Paragraph
+            
+            logger.info("Using reportlab for text to PDF conversion")
+            
+            # Read the text file
+            with open(source_path, 'r', encoding='utf-8') as f:
+                content = f.read()
+            
+            # Split into paragraphs
+            paragraphs = content.split('\n')
+            
+            # Create a PDF
+            styles = getSampleStyleSheet()
+            pdf_doc = SimpleDocTemplate(target_path, pagesize=letter)
+            
+            # Convert paragraphs to reportlab paragraphs
+            pdf_elements = []
+            for text in paragraphs:
+                if text.strip():  # Skip empty lines
+                    pdf_elements.append(Paragraph(text, styles["Normal"]))
+                else:
+                    # Add spacer for empty lines
+                    pdf_elements.append(Paragraph("&nbsp;", styles["Normal"]))
+            
+            # Build the PDF
+            pdf_doc.build(pdf_elements)
+            
+            # Verify file was created
+            if os.path.exists(target_path) and os.path.getsize(target_path) > 0:
+                logger.info(f"Successfully created PDF file using reportlab: {target_path}")
+                progress_callback(100)
+                return True
+            else:
+                logger.warning("reportlab conversion failed or created empty file")
+            
+        except ImportError:
+            logger.warning("reportlab not available, using basic method")
+        
+        # Basic method using PyPDF2 and canvas
+        with open(source_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        progress_callback(50)
+        
+        # Create a PDF using PyPDF2
+        from PyPDF2 import PdfWriter
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import letter
+        from io import BytesIO
+        
+        # Create a PDF in memory
+        packet = BytesIO()
+        can = canvas.Canvas(packet, pagesize=letter)
+        
+        # Write the text - basic implementation
+        text_lines = content.split('\n')
+        y = 750  # starting y position
+        for line in text_lines:
+            if not line.strip():
+                y -= 12
+                continue
+                
+            # Split long lines
+            words = line.split()
+            current_line = ""
+            for word in words:
+                test_line = current_line + " " + word if current_line else word
+                if can.stringWidth(test_line, "Helvetica", 11) < 500:  # max width
+                    current_line = test_line
+                else:
+                    can.drawString(50, y, current_line)
+                    y -= 12
+                    if y < 50:  # new page
+                        can.showPage()
+                        y = 750
+                    current_line = word
+            
+            if current_line:
+                can.drawString(50, y, current_line)
+                y -= 12
+            
+            if y < 50:  # new page
+                can.showPage()
+                y = 750
+        
+        can.save()
+        
+        # Get the PDF data and write to file
+        packet.seek(0)
+        new_pdf = PdfReader(packet)
+        output = PdfWriter()
+        
+        # Add all pages
+        for page in range(len(new_pdf.pages)):
+            output.add_page(new_pdf.pages[page])
+        
+        # Write to file
+        with open(target_path, "wb") as output_file:
+            output.write(output_file)
         
         progress_callback(80)
-        
-        with open(target_path, 'wb') as output_pdf:
-            pdf_writer.write(output_pdf)
         
         # Verify file was created
         if not os.path.exists(target_path):
@@ -389,8 +674,15 @@ def text_to_docx(source_path, target_path, progress_callback):
         progress_callback(50)
         
         doc = Document()
-        for paragraph in text.split('\n'):
-            doc.add_paragraph(paragraph)
+        # Split text into paragraphs by newlines
+        paragraphs = text.split('\n')
+        
+        for paragraph in paragraphs:
+            # Skip empty paragraphs but add an empty paragraph for spacing
+            if paragraph.strip():
+                doc.add_paragraph(paragraph)
+            else:
+                doc.add_paragraph()
         
         progress_callback(80)
         
@@ -427,7 +719,26 @@ def convert_data_format(source_path, target_format, target_path, progress_callba
             df = pd.read_excel(source_path)
         elif source_ext == '.json':
             logger.info("Reading JSON file")
-            df = pd.read_json(source_path)
+            # Try to handle different JSON formats
+            try:
+                df = pd.read_json(source_path)
+            except ValueError:
+                # For JSON Lines or irregular formats
+                with open(source_path, 'r', encoding='utf-8') as f:
+                    json_data = json.load(f)
+                
+                # Handle different JSON structures
+                if isinstance(json_data, list):
+                    df = pd.DataFrame(json_data)
+                elif isinstance(json_data, dict):
+                    # If it's a nested dictionary, try to normalize it
+                    if any(isinstance(v, dict) for v in json_data.values()):
+                        df = pd.json_normalize(json_data)
+                    else:
+                        df = pd.DataFrame([json_data])
+                else:
+                    logger.error("Unsupported JSON structure")
+                    return False
         else:
             logger.error(f"Unsupported source format: {source_ext}")
             return False
@@ -447,7 +758,21 @@ def convert_data_format(source_path, target_format, target_path, progress_callba
             df.to_json(target_path, orient='records')
         elif target_format == 'xml':
             logger.info("Writing to XML format")
-            df.to_xml(target_path)
+            # Check if to_xml is available (pandas >= 1.3.0)
+            if hasattr(df, 'to_xml'):
+                df.to_xml(target_path)
+            else:
+                # Fallback for older pandas versions
+                xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n<data>\n'
+                for _, row in df.iterrows():
+                    xml_data += '  <record>\n'
+                    for col, value in row.items():
+                        xml_data += f'    <{col}>{value}</{col}>\n'
+                    xml_data += '  </record>\n'
+                xml_data += '</data>'
+                
+                with open(target_path, 'w', encoding='utf-8') as f:
+                    f.write(xml_data)
         elif target_format == 'html':
             logger.info("Writing to HTML format")
             df.to_html(target_path, index=False)
