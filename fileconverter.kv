@@ -20,7 +20,7 @@
         padding: dp(10)
         
         AsyncImage:
-            source: 'data/icon.png'
+            source: 'data/app_icon.jpg'
             size_hint: None, None
             size: dp(80), dp(80)
         
@@ -72,22 +72,6 @@
     NavigationDrawer:
         id: nav_content
 
-<CustomFileChooser>:
-    filters: ['!*.tmp', '!*.swp', '!*.sys', '!*/System Volume Information/*', '!*/Windows/*']
-    canvas.before:
-        Color:
-            rgba: [0.9, 0.9, 0.9, 1] if not app.is_dark_mode else [0.2, 0.2, 0.2, 1]
-        Rectangle:
-            pos: self.pos
-            size: self.size
-    
-    canvas.after:
-        Color:
-            rgba: app.theme_accent_color
-        Line:
-            rectangle: self.x, self.y, self.width, self.height
-            width: 1.5
-
 <FileConverterScreen>:
     BoxLayout:
         orientation: 'vertical'
@@ -111,7 +95,7 @@
                     size: self.size
             
             IconButton:
-                source: 'data/menu_icon.png' if platform == 'android' or platform == 'ios' else 'data/icon.png'
+                source: 'data/menu_icon.png' if platform == 'android' or platform == 'ios' else 'data/app_icon.jpg'
                 on_press: drawer.open_drawer()
             
             Label:
@@ -134,16 +118,43 @@
                 halign: 'left'
                 text_size: self.size
             
-            # File chooser
+            # File selection area
             BoxLayout:
                 orientation: 'vertical'
-                size_hint_y: 0.7
+                size_hint_y: 0.5
                 padding: [0, dp(2)]
                 
-                CustomFileChooser:
-                    id: file_chooser
-                    path: root.get_default_path()
-                    on_selection: root.on_file_selected(*args)
+                BoxLayout:
+                    orientation: 'vertical'
+                    spacing: dp(15)
+                    padding: dp(20)
+                    canvas.before:
+                        Color:
+                            rgba: [0.9, 0.9, 0.9, 1] if not app.is_dark_mode else [0.2, 0.2, 0.2, 1]
+                        Rectangle:
+                            pos: self.pos
+                            size: self.size
+                        Color:
+                            rgba: app.theme_accent_color
+                        Line:
+                            rectangle: self.x, self.y, self.width, self.height
+                            width: 1.5
+                    
+                    Label:
+                        text: 'Click the button below to select a file\nor drag and drop a file here'
+                        color: app.theme_text_color
+                        halign: 'center'
+                        valign: 'middle'
+                        text_size: self.width, None
+                        size_hint_y: None
+                        height: dp(60)
+                    
+                    Button:
+                        text: 'Select File'
+                        size_hint_y: None
+                        height: dp(50)
+                        background_color: app.theme_accent_color
+                        on_press: root.open_file_picker()
             
             Label:
                 id: selected_file_label
@@ -402,7 +413,7 @@
                     text_size: self.width, None
                 
                 Label:
-                    text: '1. Select a file using the file browser\n2. Choose the output format from the dropdown\n3. Click "Convert" to process the file\n4. Click "Download" to save the converted file'
+                    text: '1. Select a file using the Select File button\n2. Choose the output format from the dropdown\n3. Click "Convert" to process the file\n4. Click "Download" to save the converted file'
                     color: app.theme_text_color
                     size_hint_y: None
                     height: dp(120)

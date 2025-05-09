@@ -3,7 +3,6 @@ from kivy.uix.boxlayout import BoxLayout
 from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.spinner import Spinner
-from kivy.uix.filechooser import FileChooserListView
 from kivy.uix.progressbar import ProgressBar
 from kivy.uix.popup import Popup
 from kivy.core.window import Window
@@ -59,17 +58,6 @@ class DrawerLayout(BoxLayout):
 
 # Register DrawerLayout class with Kivy
 Factory.register('DrawerLayout', cls=DrawerLayout)
-
-class CustomFileChooser(FileChooserListView):
-    """Custom file chooser that handles system file access errors"""
-    
-    def is_hidden(self, fn):
-        """Override to prevent errors on system files"""
-        try:
-            return super(CustomFileChooser, self).is_hidden(fn)
-        except Exception:
-            # If we can't access the file, assume it's a system file and mark as hidden
-            return True
 
 class IconButton(ButtonBehavior, AsyncImage):
     """Custom button with icon"""
@@ -373,36 +361,168 @@ class FileConverterScreen(Screen):
     def __init__(self, **kwargs):
         super(FileConverterScreen, self).__init__(**kwargs)
         self.current_output_file = None
+        self.selected_file_path = None
+        # Setup drag and drop handling
+        Window.bind(on_dropfile=self._on_file_drop)
     
-    def get_default_path(self):
-        """Return an appropriate default path based on the platform."""
+    def _on_file_drop(self, window, file_path):
+        """Handle files dropped onto the window"""
+        # In Python 3, file_path is bytes, so decode it
+        if isinstance(file_path, bytes):
+            file_path = file_path.decode('utf-8')
+        
+        # Process the file
+        self.select_file(file_path)
+        return True
+    
+    def open_file_picker(self):
+        """Open the native file picker dialog"""
         if platform == 'android':
-            try:
-                from android.permissions import request_permissions, Permission
-                request_permissions([
-                    Permission.READ_EXTERNAL_STORAGE,
-                    Permission.WRITE_EXTERNAL_STORAGE
-                ])
-            except:
-                pass
-            return '/storage/emulated/0'  # Android's external storage
+            self._open_android_file_picker()
         elif platform == 'ios':
-            return os.path.expanduser('~/Documents')
+            # On iOS, this would require more complex setup
+            # For now, just show info about limitation
+            popup = Popup(
+                title='iOS Limitation',
+                content=Label(text='File picking on iOS requires additional setup. Please use a different platform.'),
+                size_hint=(0.8, 0.4)
+            )
+            popup.open()
         else:
-            return os.path.expanduser('~')  # Desktop home directory
+            self._open_desktop_file_picker()
     
-    def on_file_selected(self, instance, selection):
-        """Handle file selection events."""
-        if selection:
-            selected_file = selection[0]
-            self.ids.selected_file_label.text = f'Selected: {os.path.basename(selected_file)}'
+    def _open_desktop_file_picker(self):
+        """Open native file picker on desktop platforms"""
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
+            
+            # Create and hide root Tkinter window
+            root = tk.Tk()
+            root.withdraw()
+            
+            # Show file dialog and get selected file
+            file_path = filedialog.askopenfilename(
+                title="Select a file to convert",
+                filetypes=[
+                    ("All supported files", "*.*"),
+                    ("Images", "*.jpg *.jpeg *.png *.bmp *.webp *.gif"),
+                    ("Documents", "*.pdf *.docx *.txt"),
+                    ("Data files", "*.csv *.xlsx *.json")
+                ]
+            )
+            
+            # Process the selected file
+            if file_path:
+                self.select_file(file_path)
+            
+            # Close Tkinter
+            root.destroy()
+        
+        except Exception as e:
+            self.ids.status_label.text = f"Error opening file picker: {str(e)}"
+    
+    def _open_android_file_picker(self):
+        """Open native file picker on Android"""
+        try:
+            from android.storage import primary_external_storage_path
+            from android import activity
+            from jnius import autoclass
+            
+            Intent = autoclass('android.content.Intent')
+            Uri = autoclass('android.net.Uri')
+            
+            # Create intent for opening document
+            intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            intent.addCategory(Intent.CATEGORY_OPENABLE)
+            intent.setType("*/*")  # All file types
+            
+            # Set up activity result handling
+            def on_activity_result(request_code, result_code, data):
+                if result_code == -1:  # RESULT_OK
+                    uri = data.getData()
+                    # Get real file path from URI
+                    file_path = self._get_file_path_from_uri(uri)
+                    if file_path:
+                        self.select_file(file_path)
+                    else:
+                        self.ids.status_label.text = "Could not access the selected file"
+            
+            # Register the callback
+            activity.bind(on_activity_result=on_activity_result)
+            
+            # Start the intent activity
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            current_activity = PythonActivity.mActivity
+            current_activity.startActivityForResult(intent, 0)
+            
+        except Exception as e:
+            self.ids.status_label.text = f"Error opening file picker: {str(e)}"
+    
+    def _get_file_path_from_uri(self, uri):
+        """Convert Android URI to file path - basic implementation"""
+        try:
+            from jnius import autoclass
+            from android.storage import primary_external_storage_path
+            
+            ContentResolver = autoclass('android.content.ContentResolver')
+            Cursor = autoclass('android.database.Cursor')
+            PythonActivity = autoclass('org.kivy.android.PythonActivity')
+            
+            cr = PythonActivity.mActivity.getContentResolver()
+            cursor = cr.query(uri, ["_data"], None, None, None)
+            
+            if cursor is not None and cursor.moveToFirst():
+                idx = cursor.getColumnIndex("_data")
+                if idx != -1:
+                    file_path = cursor.getString(idx)
+                    cursor.close()
+                    return file_path
+                cursor.close()
+            
+            # Fallback: try to copy file to app's storage
+            try:
+                import os
+                import time
+                
+                # Create temp directory if needed
+                temp_dir = os.path.join(primary_external_storage_path(), 'temp_files')
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
+                
+                # Generate unique filename
+                file_name = f"converted_file_{int(time.time())}"
+                temp_file = os.path.join(temp_dir, file_name)
+                
+                # Copy the file
+                input_stream = cr.openInputStream(uri)
+                with open(temp_file, 'wb') as f:
+                    while True:
+                        buffer = input_stream.read(4096)
+                        if not buffer:
+                            break
+                        f.write(buffer)
+                input_stream.close()
+                
+                return temp_file
+            except:
+                return None
+                
+        except Exception:
+            return None
+    
+    def select_file(self, file_path):
+        """Process the selected file"""
+        if os.path.exists(file_path):
+            self.selected_file_path = file_path
+            self.ids.selected_file_label.text = f'Selected: {os.path.basename(file_path)}'
             
             # Animate the label
             anim = Animation(opacity=0, duration=0.1) + Animation(opacity=1, duration=0.1)
             anim.start(self.ids.selected_file_label)
             
             # Get available output formats for this file type
-            file_ext = os.path.splitext(selected_file)[1].lower()
+            file_ext = os.path.splitext(file_path)[1].lower()
             formats = get_available_formats(file_ext)
             
             if formats:
@@ -428,17 +548,13 @@ class FileConverterScreen(Screen):
             
             # Add to recent files
             if hasattr(App.get_running_app().root, 'recent_files_screen'):
-                App.get_running_app().root.recent_files_screen.add_recent_file(selected_file)
-    
-    def select_file(self, file_path):
-        """Programmatically select a file (for recent files)."""
-        if os.path.exists(file_path):
-            self.ids.file_chooser.selection = [file_path]
-            self.on_file_selected(self.ids.file_chooser, [file_path])
+                App.get_running_app().root.recent_files_screen.add_recent_file(file_path)
+        else:
+            self.ids.status_label.text = f"File not found: {file_path}"
     
     def on_convert_pressed(self):
         # Start conversion process
-        if not self.ids.file_chooser.selection:
+        if not self.selected_file_path:
             self.ids.status_label.text = 'Please select a file first'
             
             # Shake animation for status label
@@ -449,7 +565,7 @@ class FileConverterScreen(Screen):
             shake.start(self.ids.status_label)
             return
         
-        source_file = self.ids.file_chooser.selection[0]
+        source_file = self.selected_file_path
         target_format = self.ids.format_spinner.text
         
         if target_format == 'Select format' or target_format == 'Unsupported file type':
@@ -524,7 +640,7 @@ class FileConverterScreen(Screen):
             
             # Add to recent files with output
             if hasattr(App.get_running_app().root, 'recent_files_screen'):
-                source_file = self.ids.file_chooser.selection[0]
+                source_file = self.selected_file_path
                 App.get_running_app().root.recent_files_screen.add_recent_file(source_file, output_file)
         else:
             self.ids.status_label.text = 'Conversion failed'

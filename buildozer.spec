@@ -31,7 +31,7 @@ icon.filename = %(source.dir)s/data/icon.png
 orientation = portrait
 
 # Android specific
-android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.permissions = READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE,MANAGE_EXTERNAL_STORAGE
 android.api = 33
 android.minapi = 21
 android.sdk = 33
